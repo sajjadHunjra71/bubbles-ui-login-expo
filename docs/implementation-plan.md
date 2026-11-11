@@ -1,6 +1,6 @@
 # Implementation plan: project-01-interactive-login ("Aura")
 
-Status: REVIEWED TWICE (revised after docs/plan-review.md and docs/plan-audit-2.md; awaiting Sajjad's approval; faces = Unsplash, confirmed 2026-11-12)
+Status: REVIEWED TWICE (revised after docs/plan-review.md and docs/plan-audit-2.md; APPROVED by Sajjad on 2026-11-12; faces = Unsplash, confirmed 2026-11-12)
 
 Source of truth for motion: `reference/analysis.md` (timeline items #1 to #13). Where the second audit re-measured a value from the frames, this plan cites the frame and `motion.ts` uses the re-measured value (see audit-2 findings A1 and A4).
 

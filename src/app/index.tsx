@@ -1,3 +1,3 @@
-import { ShowcaseScreen } from '@/features/showcase/showcase-screen';
+import { AuraLoginScreen } from '@/features/aura-login/aura-login-screen';
 
-export default ShowcaseScreen;
+export default AuraLoginScreen;

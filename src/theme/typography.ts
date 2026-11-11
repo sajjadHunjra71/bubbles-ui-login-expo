@@ -27,3 +27,8 @@ export const typography = {
 } as const satisfies Record<string, TextStyle>;
 
 export type TypographyVariant = keyof typeof typography;
+
+/** Serif italic accent face for the Aura headline (loaded in src/app/_layout.tsx). */
+export const auraFonts = {
+  serifItalic: 'InstrumentSerif_400Regular_Italic',
+} as const;
