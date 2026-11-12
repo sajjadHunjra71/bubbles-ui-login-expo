@@ -43,6 +43,12 @@ export type AuraState = {
   touchY: SharedValue<number>;
   touchVX: SharedValue<number>;
   touchVY: SharedValue<number>;
+  /** Touch-down point and time, to tell a tap (pop) from a drag (push). */
+  touchStartX: SharedValue<number>;
+  touchStartY: SharedValue<number>;
+  touchStartT: SharedValue<number>;
+  /** 1 while a tap is waiting to be resolved against the sim on the next frame. */
+  tapPending: SharedValue<number>;
   /** Card morph progress 0..1 and which pill it grows from (0 = Sign in, 1 = Sign up). */
   cardProgress: SharedValue<number>;
   cardDrag: SharedValue<number>;
@@ -66,12 +72,16 @@ export function useAuraState(): AuraState {
     lensR: useSharedValue(0),
     lensTint: useSharedValue(0),
     introOpacity: useSharedValue(1),
-    headerOpacity: useSharedValue(0),
+    headerOpacity: useSharedValue(1),
     touchActive: useSharedValue(0),
     touchX: useSharedValue(0),
     touchY: useSharedValue(0),
     touchVX: useSharedValue(0),
     touchVY: useSharedValue(0),
+    touchStartX: useSharedValue(0),
+    touchStartY: useSharedValue(0),
+    touchStartT: useSharedValue(0),
+    tapPending: useSharedValue(0),
     cardProgress: useSharedValue(0),
     cardDrag: useSharedValue(0),
     morphSource: useSharedValue(0),

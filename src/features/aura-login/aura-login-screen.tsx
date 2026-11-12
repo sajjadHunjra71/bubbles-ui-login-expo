@@ -1,5 +1,14 @@
 import { BlurView } from 'expo-blur';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { makeImageFromView, type SkImage } from '@shopify/react-native-skia';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentRef,
+  type RefObject,
+} from 'react';
 import { Keyboard, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { GestureDetector, useManualGesture } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
@@ -19,12 +28,14 @@ import { closeCard, openCard } from './components/card-morph';
 import { CreateAuraCard, type PhoneInputRef } from './components/create-aura-card';
 import { IntroOverlay, SwipeDot } from './components/intro-overlay';
 import { LabelBubble } from './components/label-bubble';
-import { LensRimCanvas } from './components/lens-rim-canvas';
-import { LENS_BLUR_INTENSITY, RevealLens } from './components/reveal-lens';
+import { LensCanvas } from './components/lens-canvas';
 import { handleCenter, useSwipeReveal } from './components/use-swipe-reveal';
 import { WelcomeHeader } from './components/welcome-header';
-import { swipe } from './motion';
+import { bubblePop, swipe } from './motion';
 import { Phase, useAuraState, type AuraState, type PillId, type Stage } from './state';
+
+/** Preview blur over the live scene while dragging (#2). */
+const PREVIEW_BLUR_INTENSITY = 60;
 
 /** React-side mirror of the phase machine: only mounts and pointer events, never per frame. */
 type Ui = {
@@ -34,6 +45,8 @@ type Ui = {
   welcome: boolean;
   cycling: boolean;
   card: boolean;
+  /** The sheet is mounted (off-screen) from the first welcome, so opening never waits on a mount. */
+  sheetMounted: boolean;
   runId: number;
 };
 
@@ -44,6 +57,7 @@ const INITIAL_UI: Ui = {
   welcome: false,
   cycling: false,
   card: false,
+  sheetMounted: false,
   runId: 0,
 };
 
@@ -74,7 +88,27 @@ export function AuraLoginScreen() {
   const inputRef = useRef<PhoneInputRef>(null);
   const background = useMemo(() => makeBackgroundPaint(stage.height), [stage.height]);
 
-  useBubbleSim(state, stage);
+  useBubbleSim(state, stage, haptics.light);
+
+  // One-off snapshot of the header and buttons, so the lens can blur them too (they are RN
+  // views, which a Skia canvas cannot see). Taken once fonts and layout have settled.
+  const welcomeRef = useRef<ComponentRef<typeof View>>(null);
+  const [uiSnapshot, setUiSnapshot] = useState<SkImage | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      // Skia's typing predates RN 0.88's element refs; at runtime it only needs the native view.
+      makeImageFromView(welcomeRef as unknown as RefObject<number | null>)
+        .then((image) => {
+          if (!cancelled) setUiSnapshot(image);
+        })
+        .catch((error: unknown) => console.warn('[aura] UI snapshot failed', error));
+    }, 600);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [stage.width, stage.height]);
 
   // Park the knob on the handle.
   const { dotX, dotY } = state;
@@ -90,7 +124,7 @@ export function AuraLoginScreen() {
       setUi((u) => ({ ...u, lens: true, cycling: true, runId: u.runId + 1 }));
     },
     onLensFull: () => setUi((u) => ({ ...u, preview: false })),
-    onRevealed: () => setUi((u) => ({ ...u, intro: false, welcome: true })),
+    onRevealed: () => setUi((u) => ({ ...u, intro: false, welcome: true, sheetMounted: true })),
   });
 
   const touchGesture = useBubbleTouch(state);
@@ -120,7 +154,7 @@ export function AuraLoginScreen() {
     phase.set(Phase.locked);
     progress.set(0);
     introOpacity.set(1);
-    headerOpacity.set(0);
+    headerOpacity.set(1);
     lensR.set(0);
     lensTint.set(0);
     cardProgress.set(0);
@@ -139,22 +173,35 @@ export function AuraLoginScreen() {
           paints={paints}
           background={background}
         />
-        <View style={StyleSheet.absoluteFill} pointerEvents={ui.welcome ? 'box-none' : 'none'}>
+        <View
+          ref={welcomeRef}
+          collapsable={false}
+          style={StyleSheet.absoluteFill}
+          pointerEvents={ui.welcome ? 'box-none' : 'none'}
+        >
           <WelcomeLayer state={state} stage={stage} onOpen={onOpen} onReset={onReset} />
         </View>
         <BubbleCanvas state={state} stage={stage} layer={LAYER_FRONT} paints={paints} />
 
         {ui.preview && <PreviewBlur state={state} />}
-        {ui.lens && <RevealLens state={state} stage={stage} />}
-        {ui.lens && <LensRimCanvas state={state} stage={stage} />}
+        {ui.lens && (
+          <LensCanvas
+            state={state}
+            stage={stage}
+            paints={paints}
+            background={background}
+            uiSnapshot={uiSnapshot}
+          />
+        )}
 
         <LabelBubble key={ui.runId} stage={stage} cycling={ui.cycling} tappable={ui.welcome} />
 
         {ui.intro && <IntroOverlay state={state} stage={stage} gesture={swipeGesture} />}
         {ui.intro && <SwipeDot state={state} stage={stage} />}
 
-        {ui.card && (
+        {ui.sheetMounted && (
           <CreateAuraCard
+            open={ui.card}
             state={state}
             stage={stage}
             inputRef={inputRef}
@@ -194,7 +241,7 @@ function PreviewBlur({ state }: { state: AuraState }) {
   const dim = useAnimatedStyle(() => ({ opacity: progress.get() * swipe.dimMax }));
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <BlurView intensity={LENS_BLUR_INTENSITY} tint="default" style={StyleSheet.absoluteFill} />
+      <BlurView intensity={PREVIEW_BLUR_INTENSITY} tint="default" style={StyleSheet.absoluteFill} />
       <Animated.View style={[StyleSheet.absoluteFill, styles.dim, dim]} />
     </View>
   );
@@ -205,22 +252,40 @@ function PreviewBlur({ state }: { state: AuraState }) {
  * only reads touches, so pills and the label keep receiving their own touches (audit-2 B4).
  */
 function useBubbleTouch(state: AuraState) {
-  const { phase, touchActive, touchX, touchY, touchVX, touchVY } = state;
+  const {
+    phase,
+    pillFrames,
+    touchActive,
+    touchX,
+    touchY,
+    touchVX,
+    touchVY,
+    touchStartX,
+    touchStartY,
+    touchStartT,
+    tapPending,
+  } = state;
   return useManualGesture({
     onTouchesDown: (e) => {
       'worklet';
       const t = e.allTouches[0];
       if (t === undefined || phase.get() !== Phase.welcome) return;
+      touchStartX.set(t.x);
+      touchStartY.set(t.y);
+      touchStartT.set(Date.now());
       touchX.set(t.x);
       touchY.set(t.y);
       touchVX.set(0);
       touchVY.set(0);
-      touchActive.set(1);
+      // Pushing only starts once the finger actually moves (a tap pops instead).
+      touchActive.set(0);
     },
     onTouchesMove: (e) => {
       'worklet';
       const t = e.allTouches[0];
-      if (t === undefined || touchActive.get() === 0) return;
+      if (t === undefined || phase.get() !== Phase.welcome) return;
+      const moved = Math.hypot(t.x - touchStartX.get(), t.y - touchStartY.get());
+      if (moved > bubblePop.tapMaxMove) touchActive.set(1);
       // Per-event delta → rough velocity, low-pass filtered (events arrive at ~60-120 Hz).
       const vx = (t.x - touchX.get()) * 60;
       const vy = (t.y - touchY.get()) * 60;
@@ -229,9 +294,20 @@ function useBubbleTouch(state: AuraState) {
       touchX.set(t.x);
       touchY.set(t.y);
     },
-    onTouchesUp: () => {
+    onTouchesUp: (e) => {
       'worklet';
+      const wasDrag = touchActive.get() === 1;
       touchActive.set(0);
+      const t = e.changedTouches[0];
+      if (t === undefined || wasDrag || phase.get() !== Phase.welcome) return;
+      const quick = Date.now() - touchStartT.get() < bubblePop.tapMaxMs;
+      // Taps on the buttons belong to the buttons, not to bubbles behind them.
+      const onButtons = t.y >= pillFrames.get().signIn.y - 4 && pillFrames.get().signIn.y > 0;
+      if (quick && !onButtons) {
+        touchX.set(t.x);
+        touchY.set(t.y);
+        tapPending.set(1);
+      }
     },
     onTouchesCancel: () => {
       'worklet';

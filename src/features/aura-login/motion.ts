@@ -46,6 +46,17 @@ export const reveal = {
   introOutMs: 140,
 } as const;
 
+/** The lens body (one Skia canvas: blur + tint + rim share one radius per frame). */
+export const lens = {
+  /** Gaussian sigma of the blur inside the lens; about the same as the preview BlurView. */
+  blurSigma: 14,
+  /** Faint milky veil over the blur, like the UIKit material in the preview. */
+  veil: 'rgba(255,255,255,0.07)',
+  /** Multiplier on aura.labelBody's own alpha at the end of the shrink. */
+  tintAlpha: 0.62,
+  rimSpinDegPerFrame: 0.5,
+} as const;
+
 /** #6: the headline opacity becomes visible from about 2.70 s (r_011). */
 export const header = {
   delayMs: 100,
@@ -97,6 +108,26 @@ export const bubbleTouch = {
   flickTransfer: 0.35,
 } as const;
 
+/**
+ * Tap-to-pop (Sajjad's review, 2026-11-12): a tapped bubble bursts like a soap film. The film
+ * vanishes in the first quarter, the rim tears into expanding arcs, droplets spray outward.
+ */
+export const bubblePop = {
+  durationS: 0.5,
+  /** Extra touch radius around a bubble, in points. */
+  hitSlop: 6,
+  /** A touch is a tap if it lifts within this time and moves less than this distance. */
+  tapMaxMs: 260,
+  tapMaxMove: 10,
+  droplets: 14,
+  /** How far the droplets fly, in bubble radii. */
+  sprayRadii: 1.5,
+  rimExpand: 0.5,
+  /** Bright film flash at the instant of the burst. */
+  flashS: 0.07,
+  shards: 7,
+} as const;
+
 /** #8 (A4): label swaps; first one at commit + 0.6 s, then every 2.6 s. */
 export const label = {
   words: ['SEND', 'RECEIVE', 'SWAP'] as const,
@@ -106,24 +137,28 @@ export const label = {
   popFrom: 0.9,
 } as const;
 
-/** #10 to #13: Sign in → card morph. */
+/**
+ * #10 to #13, revised after Sajjad's review: the glass sheet slides up from the bottom (instead
+ * of a fast 250 ms morph from the pill, which read as abrupt) and slides back down on close.
+ * Transform-only, so no layout pass per frame.
+ */
 export const card = {
-  /** #11: 9.33 → 9.58 s, 15 frames. */
-  openMs: 250,
-  /** #13: 10.45 → 10.75 s, 18 frames. */
-  closeMs: 300,
-  easing: easings.fastOutSlowIn,
-  radiusFrom: 22,
-  radiusTo: 28,
+  openMs: 520,
+  /** easeOutQuart: quick start, long soft landing. */
+  openEasing: easings.emphasized,
+  closeMs: 380,
+  closeEasing: easings.fastOutSlowIn,
+  radius: 28,
   blurIntensity: 40,
-  contentFrom: 0.5,
-  contentScaleFrom: 0.96,
-  /** Close: content fades over the first 40%. */
-  closeContentShare: 0.4,
+  /** Content fades in over the last part of the rise, and out over the first part of the fall. */
+  contentFrom: 0.35,
+  closeContentShare: 0.45,
+  /** Backdrop dim behind the sheet at full open. */
+  dimMax: 0.28,
   insetX: 8,
   insetTop: 6,
   insetBottom: 8,
-  dismissDistance: 80,
-  dismissVelocity: 600,
+  dismissDistance: 90,
+  dismissVelocity: 700,
   pressScale: 0.97,
 } as const;

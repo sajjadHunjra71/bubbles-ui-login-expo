@@ -15,24 +15,13 @@ export function cardFrame(stage: Stage): Rect {
   };
 }
 
-export function lerp(a: number, b: number, t: number): number {
+/** Distance the sheet travels: from fully below the screen to its resting frame. */
+export function sheetTravel(stage: Stage): number {
   'worklet';
-  return a + (b - a) * t;
+  return stage.height - cardFrame(stage).y;
 }
 
-/** Container transform between the source pill rect and the card rect (#11/#13). */
-export function morphRect(from: Rect, to: Rect, t: number): Rect & { radius: number } {
-  'worklet';
-  return {
-    x: lerp(from.x, to.x, t),
-    y: lerp(from.y, to.y, t),
-    width: lerp(from.width, to.width, t),
-    height: lerp(from.height, to.height, t),
-    radius: lerp(Math.min(card.radiusFrom, from.height / 2), card.radiusTo, t),
-  };
-}
-
-/** #11: open from the tapped pill; `onOpened` focuses the phone field. */
+/** Opens the glass sheet; `onOpened` focuses the phone field. */
 export function openCard(state: AuraState, source: 0 | 1, onOpened: () => void) {
   'worklet';
   const { phase, cardProgress, cardDrag, morphSource } = state;
@@ -41,7 +30,7 @@ export function openCard(state: AuraState, source: 0 | 1, onOpened: () => void) 
   cardDrag.set(0);
   phase.set(Phase.sheetOpening);
   cardProgress.set(
-    withTiming(1, { duration: card.openMs, easing: card.easing }, (finished) => {
+    withTiming(1, { duration: card.openMs, easing: card.openEasing }, (finished) => {
       'worklet';
       if (!finished) return;
       phase.set(Phase.sheet);
@@ -50,17 +39,16 @@ export function openCard(state: AuraState, source: 0 | 1, onOpened: () => void) 
   );
 }
 
-/** #13: collapse back into the pill; the pill reappears on the frame the card unmounts. */
+/** Slides the sheet back down; the bubble field resumes on the first frame (audit-2 A7). */
 export function closeCard(state: AuraState, onClosed: () => void) {
   'worklet';
   const { phase, cardProgress, cardDrag } = state;
   const p = phase.get();
   if (p !== Phase.sheet && p !== Phase.sheetOpening) return;
-  // The sim resumes on this first frame, so a full field sits behind the collapsing card (A7).
   phase.set(Phase.sheetClosing);
   cardDrag.set(withSpring(0, { damping: 30, stiffness: 260 }));
   cardProgress.set(
-    withTiming(0, { duration: card.closeMs, easing: card.easing }, (finished) => {
+    withTiming(0, { duration: card.closeMs, easing: card.closeEasing }, (finished) => {
       'worklet';
       if (!finished) return;
       phase.set(Phase.welcome);

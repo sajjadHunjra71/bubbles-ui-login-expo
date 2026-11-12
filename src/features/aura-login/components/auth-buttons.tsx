@@ -53,23 +53,9 @@ export function AuthButtons({ state, stage, onOpen }: Props) {
 
   return (
     <View style={[styles.root, { bottom: stage.insetBottom + 10 }]} pointerEvents="box-none">
-      <Pill
-        id="signIn"
-        animatedRef={signInRef}
-        state={state}
-        onOpen={onOpen}
-        label="Sign in"
-        variant="light"
-      />
+      <Pill id="signIn" animatedRef={signInRef} onOpen={onOpen} label="Sign in" variant="light" />
       <View style={styles.gap} />
-      <Pill
-        id="signUp"
-        animatedRef={signUpRef}
-        state={state}
-        onOpen={onOpen}
-        label="Sign up"
-        variant="dark"
-      />
+      <Pill id="signUp" animatedRef={signUpRef} onOpen={onOpen} label="Sign up" variant="dark" />
       <Text style={styles.terms}>
         By using our platform, you agree to our terms.{'\n'}Please read them to understand your
         rights.
@@ -82,21 +68,15 @@ type PillProps = {
   id: PillId;
   label: string;
   variant: 'light' | 'dark';
-  state: AuraState;
   animatedRef: AnimatedRef<Animated.View>;
   onOpen: (pill: PillId) => void;
 };
 
-function Pill({ id, label, variant, state, animatedRef, onOpen }: PillProps) {
-  const { phase, morphSource } = state;
-  const sourceIndex = id === 'signIn' ? 0 : 1;
+function Pill({ id, label, variant, animatedRef, onOpen }: PillProps) {
   const scale = useSharedValue(1);
 
-  const style = useAnimatedStyle(() => {
-    const p = phase.get();
-    const hidden = p >= Phase.sheetOpening && morphSource.get() === sourceIndex;
-    return { opacity: hidden ? 0 : 1, transform: [{ scale: scale.get() }] };
-  });
+  // The sheet now slides up over the pills, so the pills stay put.
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
 
   return (
     <Pressable

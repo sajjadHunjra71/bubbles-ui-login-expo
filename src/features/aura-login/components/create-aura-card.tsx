@@ -4,12 +4,7 @@ import type { ComponentRef, RefObject } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
-import Animated, {
-  interpolate,
-  useAnimatedProps,
-  useAnimatedStyle,
-  withSpring,
-} from 'react-native-reanimated';
+import Animated, { interpolate, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
 
@@ -18,13 +13,13 @@ import { aura, auraFonts } from '@/theme';
 import { faceSources } from '../assets/faces';
 import { card } from '../motion';
 import { Phase, type AuraState, type Stage } from '../state';
-import { cardFrame, morphRect, shouldDismiss } from './card-morph';
+import { cardFrame, sheetTravel, shouldDismiss } from './card-morph';
 
 export type PhoneInputRef = ComponentRef<typeof TextInput>;
 
-const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
-
 type Props = {
+  /** Interactive only while open; otherwise it waits off-screen. */
+  open: boolean;
   state: AuraState;
   stage: Stage;
   inputRef: RefObject<PhoneInputRef | null>;
@@ -32,51 +27,29 @@ type Props = {
 };
 
 /**
- * #11 to #13: the frosted "Create Your Aura" card. The clip view morphs from the pill rect to
- * the card rect (250 ms open / 300 ms close); the content is laid out once at the final size
- * and only fades/scales, so nothing reflows per frame. The phone field is always mounted and
- * focused at the end of the morph; the bottom block rides the keyboard.
+ * #11 to #13, revised after Sajjad's review: the frosted "Create Your Aura" glass sheet slides up
+ * from the bottom (520 ms, easeOutQuart) over a dimmed backdrop and slides back down on close
+ * (380 ms). Only transform and opacity animate, so there is no layout work per frame, and the
+ * blur keeps a fixed intensity (animating it re-renders the effect every frame). The phone field
+ * is always mounted and focused when the sheet lands; the bottom block rides the keyboard.
  */
-export function CreateAuraCard({ state, stage, inputRef, onRequestClose }: Props) {
-  const { cardProgress, cardDrag, pillFrames, morphSource, phase } = state;
+export function CreateAuraCard({ open, state, stage, inputRef, onRequestClose }: Props) {
+  const { cardProgress, cardDrag, phase } = state;
   const target = cardFrame(stage);
+  const travel = sheetTravel(stage);
   const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
 
-  const shell = useAnimatedStyle(() => {
-    const frames = pillFrames.get();
-    const from = morphSource.get() === 0 ? frames.signIn : frames.signUp;
-    const r = morphRect(from, target, cardProgress.get());
-    return {
-      left: r.x,
-      top: r.y,
-      width: r.width,
-      height: r.height,
-      borderRadius: r.radius,
-      transform: [{ translateY: cardDrag.get() }],
-    };
-  });
-  const blurProps = useAnimatedProps(() => ({
-    intensity: Math.max(1, cardProgress.get() * card.blurIntensity),
-  }));
-  // Starts as the light pill and warms into the brown card.
-  const pillTint = useAnimatedStyle(() => ({
-    opacity: interpolate(cardProgress.get(), [0, 0.5], [1, 0], 'clamp'),
-  }));
-  const warmTint = useAnimatedStyle(() => ({
-    opacity: interpolate(cardProgress.get(), [0, 0.6], [0.2, 1], 'clamp'),
+  const backdrop = useAnimatedStyle(() => ({ opacity: cardProgress.get() * card.dimMax }));
+  const sheet = useAnimatedStyle(() => ({
+    transform: [{ translateY: (1 - cardProgress.get()) * travel + cardDrag.get() }],
   }));
   const content = useAnimatedStyle(() => {
     const p = cardProgress.get();
     const closing = phase.get() === Phase.sheetClosing;
-    const opacity = closing
-      ? interpolate(p, [1 - card.closeContentShare, 1], [0, 1], 'clamp')
-      : interpolate(p, [card.contentFrom, 1], [0, 1], 'clamp');
     return {
-      opacity,
-      transform: [
-        { translateY: cardDrag.get() },
-        { scale: interpolate(p, [0, 1], [card.contentScaleFrom, 1]) },
-      ],
+      opacity: closing
+        ? interpolate(p, [1 - card.closeContentShare, 1], [0, 1], 'clamp')
+        : interpolate(p, [card.contentFrom, 1], [0, 1], 'clamp'),
     };
   });
   const bottomBlock = useAnimatedStyle(() => {
@@ -107,80 +80,89 @@ export function CreateAuraCard({ state, stage, inputRef, onRequestClose }: Props
   });
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      <Animated.View style={[styles.shell, shell]} pointerEvents="none">
-        <AnimatedBlurView tint="dark" animatedProps={blurProps} style={StyleSheet.absoluteFill} />
-        <Animated.View style={[StyleSheet.absoluteFill, styles.warm, warmTint]} />
-        <Animated.View style={[StyleSheet.absoluteFill, styles.pillTint, pillTint]} />
+    <View style={StyleSheet.absoluteFill} pointerEvents={open ? 'box-none' : 'none'}>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdrop]}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onRequestClose}
+          accessibilityLabel="Close sheet"
+        />
       </Animated.View>
 
       <GestureDetector gesture={dismiss}>
         <Animated.View
           style={[
-            styles.content,
+            styles.sheet,
             { left: target.x, top: target.y, width: target.width, height: target.height },
-            content,
+            sheet,
           ]}
         >
-          <Pressable
-            onPress={onRequestClose}
-            hitSlop={12}
-            style={styles.back}
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-          >
-            <Svg width={8} height={13} viewBox="0 0 8 13">
-              <Path
-                d="M6.5 1.5 L1.5 6.5 L6.5 11.5"
-                stroke={aura.white}
-                strokeWidth={1.8}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-              />
-            </Svg>
-          </Pressable>
+          <BlurView tint="dark" intensity={card.blurIntensity} style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, styles.warm]} pointerEvents="none" />
+          <Animated.View style={[StyleSheet.absoluteFill, styles.content, content]}>
+            <Pressable
+              onPress={onRequestClose}
+              hitSlop={12}
+              style={styles.back}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+            >
+              <Svg width={8} height={13} viewBox="0 0 8 13">
+                <Path
+                  d="M6.5 1.5 L1.5 6.5 L6.5 11.5"
+                  stroke={aura.white}
+                  strokeWidth={1.8}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              </Svg>
+            </Pressable>
 
-          <View style={styles.grabber} />
+            <View style={styles.grabber} />
 
-          <View style={styles.cluster}>
-            {[2, 6, 11].map((face, i) => (
-              <Image
-                key={face}
-                source={faceSources[face]}
-                style={[styles.avatar, { marginLeft: i === 0 ? 0 : -10, zIndex: i === 1 ? 2 : 1 }]}
-              />
-            ))}
-          </View>
-
-          <Text style={styles.title}>
-            Create Your <Text style={styles.titleSerif}>Aura</Text>
-          </Text>
-          <Text style={styles.subtitle}>
-            Your lifestyle banking experience{'\n'}starts in less than a minute.
-          </Text>
-
-          <View style={styles.field}>
-            <Text style={styles.flag}>🇺🇸</Text>
-            <Text style={styles.code}>+1</Text>
-            <View style={styles.divider} />
-            <TextInput
-              ref={inputRef}
-              style={styles.input}
-              placeholder="Enter Phone"
-              placeholderTextColor={aura.text80}
-              keyboardType="phone-pad"
-              textContentType="telephoneNumber"
-              selectionColor={aura.white}
-              keyboardAppearance="dark"
-            />
-          </View>
-
-          <Animated.View style={[styles.bottom, bottomBlock]}>
-            <Text style={styles.useEmail}>Use email</Text>
-            <View style={styles.continue}>
-              <Text style={styles.continueText}>Continue</Text>
+            <View style={styles.cluster}>
+              {[2, 6, 11].map((face, i) => (
+                <Image
+                  key={face}
+                  source={faceSources[face]}
+                  style={[
+                    styles.avatar,
+                    { marginLeft: i === 0 ? 0 : -10, zIndex: i === 1 ? 2 : 1 },
+                  ]}
+                />
+              ))}
             </View>
+
+            <Text style={styles.title}>
+              Create Your <Text style={styles.titleSerif}>Aura</Text>
+            </Text>
+            <Text style={styles.subtitle}>
+              Your lifestyle banking experience{'\n'}starts in less than a minute.
+            </Text>
+
+            <View style={styles.field}>
+              <Text style={styles.flag}>🇺🇸</Text>
+              <Text style={styles.code}>+1</Text>
+              <View style={styles.divider} />
+              <TextInput
+                ref={inputRef}
+                style={styles.input}
+                placeholder="Enter Phone"
+                placeholderTextColor={aura.text80}
+                keyboardType="phone-pad"
+                textContentType="telephoneNumber"
+                selectionColor={aura.white}
+                keyboardAppearance="dark"
+              />
+            </View>
+
+            <Animated.View style={[styles.bottom, bottomBlock]}>
+              <Text style={styles.useEmail}>Use email</Text>
+              <View style={styles.continue}>
+                <Text style={styles.continueText}>Continue</Text>
+              </View>
+            </Animated.View>
           </Animated.View>
         </Animated.View>
       </GestureDetector>
@@ -191,10 +173,10 @@ export function CreateAuraCard({ state, stage, inputRef, onRequestClose }: Props
 const AVATAR = 30;
 
 const styles = StyleSheet.create({
-  shell: { position: 'absolute', overflow: 'hidden' },
+  backdrop: { backgroundColor: aura.dim },
+  sheet: { position: 'absolute', overflow: 'hidden', borderRadius: card.radius },
   warm: { backgroundColor: aura.sheetTint },
-  pillTint: { backgroundColor: aura.pillLight },
-  content: { position: 'absolute', alignItems: 'center', paddingHorizontal: 18 },
+  content: { alignItems: 'center', paddingHorizontal: 18 },
   back: {
     position: 'absolute',
     left: 14,

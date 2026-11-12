@@ -2,7 +2,7 @@ import { usePanGesture } from 'react-native-gesture-handler';
 import { withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { header, reveal, swipe } from '../motion';
+import { reveal, swipe } from '../motion';
 import { Phase, type AuraState, type Stage } from '../state';
 
 export type SwipeCallbacks = {
@@ -25,18 +25,7 @@ export function handleCenter(stage: Stage) {
  * the dot to the emitter, then shrink into the label bubble.
  */
 export function useSwipeReveal(state: AuraState, stage: Stage, callbacks: SwipeCallbacks) {
-  const {
-    phase,
-    progress,
-    dotX,
-    dotY,
-    lensX,
-    lensY,
-    lensR,
-    lensTint,
-    introOpacity,
-    headerOpacity,
-  } = state;
+  const { phase, progress, dotX, dotY, lensX, lensY, lensR, lensTint, introOpacity } = state;
   const travel = stage.height * swipe.travelFraction;
   const finalRadius = reveal.labelDiameter / 2;
   const { onCommit, onLensFull, onRevealed } = callbacks;
@@ -107,12 +96,6 @@ export function useSwipeReveal(state: AuraState, stage: Stage, callbacks: SwipeC
         withDelay(reveal.growMs + reveal.tintDelayMs, withTiming(1, { duration: reveal.tintMs })),
       );
       introOpacity.set(withTiming(0, { duration: reveal.introOutMs }));
-      headerOpacity.set(
-        withDelay(
-          header.delayMs,
-          withTiming(1, { duration: header.fadeMs, easing: header.easing }),
-        ),
-      );
     },
   });
 }

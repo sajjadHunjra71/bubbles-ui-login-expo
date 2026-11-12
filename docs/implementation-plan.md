@@ -189,3 +189,11 @@ No two agents write the same file. Agents that need a change in someone else's f
 ## 11. Complexity estimate
 
 High. The bubble renderer and the lens reveal carry most of the risk. Rough effort: prep + spike 1 day, theme/layout 0.5 day, bubble sim + look (with defocus) 2 to 2.5 days, swipe + reveal 1.5 days, label + bubble touch 0.5 day, card morph + keyboard + dismiss 1 day, QA/polish 1.5 days. Total about 7.5 to 8.5 days of agent work, on top of Sajjad's review time. The step 0 spike can move this either way.
+
+## 12. Changes after Sajjad's review (2026-11-12)
+
+Sajjad tested the first build and asked for three changes. They override the matching parts above.
+
+1. **Lens shrink and label body.** The lens no longer uses a BlurView inside a scaled view (it stuttered and its rim drifted from the blur). `components/lens-canvas.tsx` draws the blurred scene (gradient, both bubble layers and a one-off snapshot of the header and buttons), the dark tint and the iridescent rim in one Skia picture per frame, so blur, tint and rim share one radius on every frame. It stays mounted as the label bubble's glass body afterwards.
+2. **Tap-to-pop.** A tap (under 260 ms, under 10 pt of movement) pops the front-most bubble under the finger: film flash and fade, rim torn into expanding arcs, droplet spray, light haptic. Dragging still pushes bubbles. Taps on the buttons are ignored by the bubbles. Tokens in `motion.ts` → `bubblePop`.
+3. **Glass sheet.** Instead of a 250 ms morph from the pill, the sheet slides up from the bottom over a dimmed backdrop (520 ms, easeOutQuart) and back down (380 ms). It is mounted off-screen from the first welcome, so opening never waits on a mount; only transform and opacity animate, and the blur has a fixed intensity. Tapping the dimmed area also closes it.

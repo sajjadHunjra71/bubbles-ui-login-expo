@@ -1,4 +1,4 @@
-import { stream, bubbleTouch } from '../motion';
+import { bubblePop, bubbleTouch, stream } from '../motion';
 
 /**
  * UI-thread particle sim for the bubble stream (#7, #7a, #9).
@@ -15,7 +15,7 @@ import { stream, bubbleTouch } from '../motion';
  *   worklet's closure when it is created, so a later-declared helper would be undefined.
  */
 
-export const STRIDE = 16;
+export const STRIDE = 17;
 export const F_X = 0;
 export const F_Y = 1;
 export const F_Z = 2;
@@ -33,6 +33,8 @@ export const F_ROTV = 13;
 /** Projected values, written by stepSim for the painter. */
 export const F_SX = 14;
 export const F_SY = 15;
+/** Seconds since this bubble was popped by a tap; < 0 while intact. */
+export const F_POP = 16;
 
 export const KIND_FACE = 0;
 export const KIND_GLASS = 1;
@@ -95,6 +97,7 @@ function spawn(d: Float32Array, i: number, faceCount: number, zStart: number, ke
   d[o + F_PHASE] = Math.random() * Math.PI * 2;
   d[o + F_ROT] = Math.random() * 360;
   d[o + F_ROTV] = rand(-1, 1) * stream.rimSpinDegPerS;
+  d[o + F_POP] = -1;
   // A pre-warmed bubble has already travelled; give it its accumulated offset and full alpha.
   const travelled = (1 - zStart) * life;
   d[o + F_X] += d[o + F_VX] * travelled;
@@ -150,6 +153,27 @@ export function initSim(bounds: SimBounds): { sim: Float32Array; order: Int16Arr
 
 export type TouchInput = { active: number; x: number; y: number; vx: number; vy: number };
 
+/**
+ * Pops the front-most intact bubble under (x, y). Walks the draw order from near to far, so the
+ * bubble you see on top is the one that bursts. Returns its index, or -1 if none was hit.
+ */
+export function popAt(d: Float32Array, order: Int16Array, x: number, y: number): number {
+  'worklet';
+  for (let n = order.length - 1; n >= 0; n--) {
+    const i = order[n];
+    const o = i * STRIDE;
+    if (d[o + F_KIND] === KIND_SPARKLE || d[o + F_POP] >= 0) continue;
+    const r = d[o + F_RADIUS] * perspective(Math.max(d[o + F_Z], 0));
+    const dx = d[o + F_SX] - x;
+    const dy = d[o + F_SY] - y;
+    if (dx * dx + dy * dy <= (r + bubblePop.hitSlop) * (r + bubblePop.hitSlop)) {
+      d[o + F_POP] = 0;
+      return i;
+    }
+  }
+  return -1;
+}
+
 /** Advances the sim by dt seconds (clamped). */
 export function stepSim(
   d: Float32Array,
@@ -166,6 +190,12 @@ export function stepSim(
 
   for (let i = 0; i < n; i++) {
     const o = i * STRIDE;
+    // A popped bubble stays where it burst while its film and droplets play out.
+    if (d[o + F_POP] >= 0) {
+      d[o + F_POP] += dt;
+      if (d[o + F_POP] > bubblePop.durationS) spawn(d, i, bounds.faceCount, 1, false);
+      continue;
+    }
     const s = perspective(d[o + F_Z]);
 
     if (touching && d[o + F_KIND] !== KIND_SPARKLE) {
