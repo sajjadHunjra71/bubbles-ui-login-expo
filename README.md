@@ -41,7 +41,5 @@ In the iOS Simulator, press ⌘K to show the on-screen keypad on the phone field
 
 ## Credits
 
-- Original concept: [zain_dev\_](https://www.instagram.com/zain_dev_/) (Flutter).
-- Portrait photos: [Unsplash](https://unsplash.com) photographers under the Unsplash License; see [`CREDITS.md`](src/features/aura-login/assets/faces/CREDITS.md).
 - Font: Instrument Serif (SIL Open Font License) via `@expo-google-fonts/instrument-serif`.
 - Scaffolded from my `expo-animation-starter`, which is based on Expo's template (MIT, see [LICENSE](LICENSE)).
