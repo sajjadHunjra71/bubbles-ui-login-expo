@@ -1,49 +1,47 @@
-# Expo Animation Starter
+# Aura: interactive login (Expo React Native)
 
-This is the base template for Sajjad's React Native animation portfolio. Each portfolio project recreates a polished Flutter UI animation in Expo React Native, and every project is generated from this starter.
+A recreation, in Expo React Native, of a Flutter "interactive login screen" concept by [zain_dev\_](https://www.instagram.com/zain_dev_/). It is part of my React Native animation portfolio. All code here is my own; the original reel is not included in this repository.
 
-## Stack
+## What it does
 
-| Area       | Choice                                                        |
-| ---------- | ------------------------------------------------------------- |
-| Framework  | Expo SDK 58 · React Native 0.88 · React 19.3 · React Compiler |
-| Language   | TypeScript 6 (strict)                                         |
-| Navigation | Expo Router (`src/app`)                                       |
-| Motion     | react-native-reanimated 4 + react-native-worklets             |
-| Gestures   | react-native-gesture-handler 3                                |
-| Graphics   | react-native-svg · expo-linear-gradient · expo-blur           |
-| Feedback   | expo-haptics                                                  |
-| Quality    | ESLint (eslint-config-expo) · Prettier                        |
+- **Swipe-up handle:** dragging up fades the intro and shows a live, blurred preview of the screen behind it. Releasing early springs back with no overshoot.
+- **Soap-bubble lens reveal:** past the threshold, an iridescent bubble swells over the screen and shrinks over about 0.9 s into the label bubble. Everything inside the bubble stays blurred and everything outside it is revealed.
+- **3D bubble stream:** about 56 glass bubbles (faces, empty glass, sparkles) burst out of the label with perspective depth, thin-film rims and specular highlights. The nearest bubbles defocus and fade, and a touch pushes them away.
+- **Cycling label:** SEND, RECEIVE, SWAP, with a crossfade and a small pop.
+- **Container-transform card:** "Sign in" / "Sign up" morph into a frosted "Create Your Aura" card with a phone field. The card's bottom actions ride the keyboard, and it closes with the back button or a swipe down.
 
-Every dependency runs in **Expo Go**, so no native build is needed. Lottie and Skia are intentionally left out; add them only when a reel needs them.
+## How it is built
 
-## Structure
+| Area            | Approach                                                                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Bubble field    | A UI-thread particle sim (`Float32Array` pool stepped in `useFrameCallback`) drawn imperatively with `@shopify/react-native-skia` pictures |
+| Depth           | Two Skia canvases (behind and in front of the UI), with each bubble's layer fixed at spawn                                                 |
+| Lens            | A transform-only animated circular clip around an `expo-blur` `BlurView`, plus a Skia sweep-gradient rim                                   |
+| Gestures        | react-native-gesture-handler 3 hook API (`usePanGesture`, `useManualGesture`)                                                              |
+| Motion          | react-native-reanimated 4; every duration and curve in `src/features/aura-login/motion.ts` is measured from the reference frames           |
+| Keyboard        | react-native-keyboard-controller                                                                                                           |
+| Runs in Expo Go | Yes, no native build needed (iOS)                                                                                                          |
 
-```text
-src/
-├── app/                 # routes only (Expo Router)
-├── features/<feature>/  # screen, components/, motion.ts
-├── components/ui/       # Text, Screen, PressableScale, GlassCard, GradientBackground
-├── animations/          # motion tokens (Flutter curve equivalents, springs), entrances, worklet math
-├── hooks/               # usePressScale, useHaptics
-├── theme/               # colors, gradients, typography, spacing, radii, shadows
-├── constants/ types/ utils/ assets/
-docs/templates/          # analysis, implementation plan, plan review, agent coordination
-.claude/agents/          # ui-ux-analyst, animation-engineer, rn-engineer, qa-performance, architect-reviewer
-scripts/new-project.sh   # scaffolds a new reel project
-```
+Stack: Expo SDK 58, React Native 0.88, React 19.3 with the React Compiler, TypeScript (strict).
 
-## Commands
+## Run it
 
 ```bash
 npm install
-npm run ios          # Metro + iOS Simulator (Expo Go)
-npm run check        # typecheck + lint + format check
-npm run new-project -- project-01 "Reel title"
+npm run ios     # Metro + iOS Simulator (Expo Go)
+npm run check   # typecheck + lint + format check
 ```
 
-`new-project` copies this starter into `../project-01`, renames it, scaffolds `reference/` and `docs/`, installs dependencies, and makes the first commit.
+In the iOS Simulator, press ⌘K to show the on-screen keypad on the phone field.
 
-## Reference material
+## Docs
 
-`reference/` holds each reel's original video and extracted frames. It is git-ignored: those files are a personal study reference and are never redistributed.
+- [`docs/implementation-plan.md`](docs/implementation-plan.md): the plan, as reviewed twice ([review](docs/plan-review.md), [audit](docs/plan-audit-2.md))
+- [`docs/testing-handover.md`](docs/testing-handover.md): a manual test checklist
+
+## Credits
+
+- Original concept: [zain_dev\_](https://www.instagram.com/zain_dev_/) (Flutter).
+- Portrait photos: [Unsplash](https://unsplash.com) photographers under the Unsplash License; see [`CREDITS.md`](src/features/aura-login/assets/faces/CREDITS.md).
+- Font: Instrument Serif (SIL Open Font License) via `@expo-google-fonts/instrument-serif`.
+- Scaffolded from my `expo-animation-starter`, which is based on Expo's template (MIT, see [LICENSE](LICENSE)).
